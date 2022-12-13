@@ -1,142 +1,149 @@
 use anyhow::{anyhow, Result};
+use askama::Template;
 use prost::Message;
 use prost_types::compiler::code_generator_response::File;
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
 use prost_types::source_code_info::Location;
 use prost_types::{
-    DescriptorProto, FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto,
-    SourceCodeInfo,
+    FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto, SourceCodeInfo,
 };
+use std::convert::From;
+use std::fmt::Display;
 use std::io::{Read, Write};
 
-fn get_location<'a>(info: &'a SourceCodeInfo, path: &Vec<i32>) -> Option<&'a Location> {
+enum CallType {
+    Unary,
+    ServerStreaming,
+    ClientStreaming,
+    BidiStreaming,
+}
+
+impl From<&MethodDescriptorProto> for CallType {
+    fn from(method: &MethodDescriptorProto) -> Self {
+        match (method.server_streaming(), method.client_streaming()) {
+            (true, true) => CallType::BidiStreaming,
+            (true, false) => CallType::ServerStreaming,
+            (false, true) => CallType::ClientStreaming,
+            (false, false) => CallType::Unary,
+        }
+    }
+}
+
+impl Display for CallType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            CallType::Unary => write!(f, "unary"),
+            CallType::ServerStreaming => write!(f, "server streaming"),
+            CallType::ClientStreaming => write!(f, "client streaming"),
+            CallType::BidiStreaming => write!(f, "bidi streaming"),
+        }
+    }
+}
+
+struct Method {
+    name: String,
+    call_type: CallType,
+    description: String,
+    deprecated: bool,
+    input_type: String,
+    output_type: String,
+}
+
+impl Method {
+    fn from(
+        method: &MethodDescriptorProto,
+        path: &mut Vec<i32>,
+        idx: i32,
+        info: &SourceCodeInfo,
+    ) -> Self {
+        path.push(idx);
+        let description = get_description(get_location(info, path));
+        path.pop();
+
+        let deprecated = method
+            .options
+            .as_ref()
+            .and_then(|opt| opt.deprecated)
+            .unwrap_or(false);
+
+        Self {
+            name: method.name().to_string(),
+            call_type: method.into(),
+            description,
+            deprecated,
+            input_type: method.input_type().to_string(),
+            output_type: method.output_type().to_string(),
+        }
+    }
+}
+
+struct Service {
+    name: String,
+    description: String,
+    deprecated: bool,
+    methods: Vec<Method>,
+}
+
+#[derive(Template)]
+#[template(path = "template.md")]
+struct MarkdownTemplate {
+    services: Vec<Service>,
+}
+
+fn get_location<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> Option<&'a Location> {
     info.location.iter().find(|l| l.path == *path)
 }
 
-fn format_comments(content: &mut String, path: &mut Vec<i32>, info: &SourceCodeInfo) {
-    if let Some(location) = get_location(info, path) {
-        if let Some(s) = &location.leading_comments {
-            content.push_str(s.trim());
-            content.push_str("\n\n");
-        }
-
-        if let Some(s) = &location.trailing_comments {
-            content.push_str(s.trim());
-            content.push_str("\n\n");
-        }
-    }
+fn get_description(location: Option<&Location>) -> String {
+    location.map_or_else(|| "".to_string(), |l| l.leading_comments().to_string())
 }
 
-fn format_method(
-    method: &MethodDescriptorProto,
-    path: &mut Vec<i32>,
-    info: &SourceCodeInfo,
-) -> String {
-    let mut content = String::new();
+impl Service {
+    fn from(idx: usize, service: &ServiceDescriptorProto, info: &SourceCodeInfo) -> Self {
+        let mut path = vec![6, idx as i32];
 
-    content.push_str(&format!("### `{}()`\n\n", method.name()));
+        let location = get_location(info, &path);
 
-    let call_type = match (method.server_streaming(), method.client_streaming()) {
-        (true, true) => "bidi streaming",
-        (true, false) => "server streaming",
-        (false, true) => "client streaming",
-        (false, false) => "unary",
-    };
+        let deprecated = service
+            .options
+            .as_ref()
+            .and_then(|opt| opt.deprecated)
+            .unwrap_or(false);
 
-    content.push_str(&format!("<kbd>{call_type}</kbd>"));
+        path.push(2);
 
-    if method
-        .options
-        .as_ref()
-        .and_then(|opt| opt.deprecated)
-        .unwrap_or(false)
-    {
-        content.push_str("&nbsp;<kbd>deprecated</kbd>");
-    }
+        let methods = service
+            .method
+            .iter()
+            .enumerate()
+            .map(|(idx, method)| Method::from(method, &mut path, idx as i32, info))
+            .collect::<Vec<_>>();
 
-    content.push_str("\n\n");
-
-    format_comments(&mut content, path, info);
-
-    content.push_str(&format!("**Input: `{}`**\n\n", method.input_type()));
-    content.push_str(&format!("**Output: `{}`**\n\n", method.output_type()));
-
-    content
-}
-
-fn format_service(
-    service: &ServiceDescriptorProto,
-    path: &mut Vec<i32>,
-    info: &SourceCodeInfo,
-) -> Result<String> {
-    let mut content = String::new();
-
-    content.push_str(&format!("## {}\n\n", service.name()));
-
-    if service
-        .options
-        .as_ref()
-        .and_then(|opt| opt.deprecated)
-        .unwrap_or(false)
-    {
-        content.push_str("<kbd>deprecated</kbd>");
-    }
-
-    content.push_str("\n\n");
-
-    format_comments(&mut content, path, info);
-
-    path.push(2);
-
-    for (idx, method) in service.method.iter().enumerate() {
-        path.push(idx.try_into()?);
-        content.push_str(&format_method(method, path, info));
         path.pop();
+
+        Self {
+            name: service.name().to_string(),
+            description: get_description(location),
+            deprecated,
+            methods,
+        }
     }
-
-    path.pop();
-
-    Ok(content)
-}
-
-fn format_message(
-    descriptor: &DescriptorProto,
-    path: &mut Vec<i32>,
-    info: &SourceCodeInfo,
-) -> String {
-    let mut content = String::new();
-
-    content.push_str(&format!("## {}\n\n", descriptor.name()));
-
-    format_comments(&mut content, path, info);
-
-    content
 }
 
 fn format_proto(proto: &FileDescriptorProto) -> Result<String> {
-    let mut content = String::new();
+    let info = proto
+        .source_code_info
+        .as_ref()
+        .ok_or_else(|| anyhow!("no source code info"))?;
 
-    let info = proto.source_code_info.as_ref().unwrap();
+    let services = proto
+        .service
+        .iter()
+        .enumerate()
+        .map(|(idx, service)| Service::from(idx, service, info))
+        .collect::<Vec<_>>();
 
-    // TODO: add some enum for these ...
-    let mut path = vec![6];
-
-    for (idx, service) in proto.service.iter().enumerate() {
-        path.push(idx.try_into()?);
-        content.push_str(&format_service(service, &mut path, info)?);
-        path.pop();
-    }
-
-    path.pop();
-    path.push(4);
-
-    for (idx, message) in proto.message_type.iter().enumerate() {
-        path.push(idx.try_into()?);
-        content.push_str(&format_message(message, &mut path, info));
-        path.pop();
-    }
-
-    Ok(content)
+    Ok(MarkdownTemplate { services }.render()?)
 }
 
 fn main() -> Result<()> {
