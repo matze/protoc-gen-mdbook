@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use askama::Template;
 use prost::Message;
-use prost_types::compiler::code_generator_response::File;
+use prost_types::compiler::code_generator_response::{Feature, File};
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
 use prost_types::source_code_info::Location;
 use prost_types::{
@@ -172,7 +172,7 @@ fn main() -> Result<()> {
 
     let response = CodeGeneratorResponse {
         error: None,
-        supported_features: None,
+        supported_features: Some(Feature::Proto3Optional as u64),
         file: vec![file],
     };
 
