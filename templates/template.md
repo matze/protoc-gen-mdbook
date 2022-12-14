@@ -1,5 +1,5 @@
 {% for service in services %}
-## {{ service.name }}
+## {{ service.package }}.{{ service.name }}
 
 {% if service.deprecated -%}
 <kbd>deprecated</kbd>

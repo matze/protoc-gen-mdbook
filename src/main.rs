@@ -59,21 +59,21 @@ impl Display for CallType {
     }
 }
 
-struct Method {
-    name: String,
+struct Method<'a> {
+    name: &'a str,
     call_type: CallType,
-    description: String,
+    description: &'a str,
     deprecated: bool,
-    input_type: String,
-    output_type: String,
+    input_type: &'a str,
+    output_type: &'a str,
 }
 
-impl Method {
+impl<'a> Method<'a> {
     fn from(
-        method: &MethodDescriptorProto,
+        method: &'a MethodDescriptorProto,
         path: &mut Vec<i32>,
         idx: i32,
-        info: &SourceCodeInfo,
+        info: &'a SourceCodeInfo,
     ) -> Self {
         path.push(idx);
         let description = get_description(get_location(info, path));
@@ -86,27 +86,28 @@ impl Method {
             .unwrap_or(false);
 
         Self {
-            name: method.name().to_string(),
+            name: method.name(),
             call_type: method.into(),
             description,
             deprecated,
-            input_type: method.input_type().to_string(),
-            output_type: method.output_type().to_string(),
+            input_type: method.input_type(),
+            output_type: method.output_type(),
         }
     }
 }
 
-struct Service {
-    name: String,
-    description: String,
+struct Service<'a> {
+    name: &'a str,
+    package: &'a str,
+    description: &'a str,
     deprecated: bool,
-    methods: Vec<Method>,
+    methods: Vec<Method<'a>>,
 }
 
 #[derive(Template)]
 #[template(path = "template.md")]
-struct MarkdownTemplate {
-    services: Vec<Service>,
+struct Page<'a> {
+    services: Vec<Service<'a>>,
 }
 
 mod filters {
@@ -126,12 +127,17 @@ fn get_location<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> Option<&'a Locati
     info.location.iter().find(|l| l.path == *path)
 }
 
-fn get_description(location: Option<&Location>) -> String {
-    location.map_or_else(|| "".to_string(), |l| l.leading_comments().to_string())
+fn get_description<'a>(location: Option<&'a Location>) -> &'a str {
+    location.map_or_else(|| "", |l| l.leading_comments())
 }
 
-impl Service {
-    fn from(idx: usize, service: &ServiceDescriptorProto, info: &SourceCodeInfo) -> Self {
+impl<'a> Service<'a> {
+    fn from(
+        idx: usize,
+        proto: &'a FileDescriptorProto,
+        service: &'a ServiceDescriptorProto,
+        info: &'a SourceCodeInfo,
+    ) -> Self {
         let mut path = vec![6, idx as i32];
 
         let location = get_location(info, &path);
@@ -154,7 +160,8 @@ impl Service {
         path.pop();
 
         Self {
-            name: service.name().to_string(),
+            name: service.name(),
+            package: proto.package(),
             description: get_description(location),
             deprecated,
             methods,
@@ -172,10 +179,10 @@ fn format_proto(proto: &FileDescriptorProto) -> Result<String> {
         .service
         .iter()
         .enumerate()
-        .map(|(idx, service)| Service::from(idx, service, info))
+        .map(|(idx, service)| Service::from(idx, proto, service, info))
         .collect::<Vec<_>>();
 
-    Ok(MarkdownTemplate { services }.render()?)
+    Ok(Page { services }.render()?)
 }
 
 /// Retrieve descriptor proto `name` from `request.
