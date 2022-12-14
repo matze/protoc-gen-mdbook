@@ -17,9 +17,9 @@
 
 {{ method.description }}
 
-**Input : `{{ method.input_type }}`**
+**Input : `{{ method.input_type|rtrim_before('.') }}`**
 
-**Output : `{{ method.output_type }}`**
+**Output : `{{ method.output_type|rtrim_before('.') }}`**
 
 {% endfor %}
 {% endfor %}

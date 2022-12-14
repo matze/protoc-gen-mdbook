@@ -109,6 +109,19 @@ struct MarkdownTemplate {
     services: Vec<Service>,
 }
 
+mod filters {
+    /// Trims everything and including the final character `c`.
+    pub fn rtrim_before<T: std::fmt::Display>(s: T, c: char) -> askama::Result<String> {
+        let s = s.to_string();
+
+        if let Some(idx) = s.rfind(c) {
+            Ok(unsafe { s.get_unchecked(idx + 1..).to_string() })
+        } else {
+            Ok(s)
+        }
+    }
+}
+
 fn get_location<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> Option<&'a Location> {
     info.location.iter().find(|l| l.path == *path)
 }
