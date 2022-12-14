@@ -5,7 +5,8 @@ use prost_types::compiler::code_generator_response::{Feature, File};
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
 use prost_types::source_code_info::Location;
 use prost_types::{
-    FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto, SourceCodeInfo,
+    DescriptorProto, FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto,
+    SourceCodeInfo,
 };
 use std::convert::From;
 use std::fmt::Display;
@@ -59,17 +60,28 @@ impl Display for CallType {
     }
 }
 
+struct MessageType<'a> {
+    name: &'a str,
+}
+
+impl<'a> MessageType<'a> {
+    fn from(typ: &'a DescriptorProto) -> Self {
+        Self { name: typ.name() }
+    }
+}
+
 struct Method<'a> {
     name: &'a str,
     call_type: CallType,
     description: &'a str,
     deprecated: bool,
-    input_type: &'a str,
-    output_type: &'a str,
+    input_type: MessageType<'a>,
+    output_type: MessageType<'a>,
 }
 
 impl<'a> Method<'a> {
     fn from(
+        proto: &'a FileDescriptorProto,
         method: &'a MethodDescriptorProto,
         path: &mut Vec<i32>,
         idx: i32,
@@ -78,6 +90,20 @@ impl<'a> Method<'a> {
         path.push(idx);
         let description = get_description(get_location(info, path));
         path.pop();
+
+        let input_type = proto
+            .message_type
+            .iter()
+            .find(|m| method.input_type().ends_with(m.name()))
+            .map(MessageType::from)
+            .unwrap();
+
+        let output_type = proto
+            .message_type
+            .iter()
+            .find(|m| method.output_type().ends_with(m.name()))
+            .map(MessageType::from)
+            .unwrap();
 
         let deprecated = method
             .options
@@ -90,8 +116,8 @@ impl<'a> Method<'a> {
             call_type: method.into(),
             description,
             deprecated,
-            input_type: method.input_type(),
-            output_type: method.output_type(),
+            input_type,
+            output_type,
         }
     }
 }
@@ -110,32 +136,19 @@ struct Page<'a> {
     services: Vec<Service<'a>>,
 }
 
-mod filters {
-    /// Trims everything and including the final character `c`.
-    pub fn rtrim_before<T: std::fmt::Display>(s: T, c: char) -> askama::Result<String> {
-        let s = s.to_string();
-
-        if let Some(idx) = s.rfind(c) {
-            Ok(unsafe { s.get_unchecked(idx + 1..).to_string() })
-        } else {
-            Ok(s)
-        }
-    }
-}
-
 fn get_location<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> Option<&'a Location> {
     info.location.iter().find(|l| l.path == *path)
 }
 
-fn get_description<'a>(location: Option<&'a Location>) -> &'a str {
+fn get_description(location: Option<&Location>) -> &str {
     location.map_or_else(|| "", |l| l.leading_comments())
 }
 
 impl<'a> Service<'a> {
     fn from(
-        idx: usize,
         proto: &'a FileDescriptorProto,
         service: &'a ServiceDescriptorProto,
+        idx: usize,
         info: &'a SourceCodeInfo,
     ) -> Self {
         let mut path = vec![6, idx as i32];
@@ -154,7 +167,7 @@ impl<'a> Service<'a> {
             .method
             .iter()
             .enumerate()
-            .map(|(idx, method)| Method::from(method, &mut path, idx as i32, info))
+            .map(|(idx, method)| Method::from(proto, method, &mut path, idx as i32, info))
             .collect::<Vec<_>>();
 
         path.pop();
@@ -179,7 +192,7 @@ fn format_proto(proto: &FileDescriptorProto) -> Result<String> {
         .service
         .iter()
         .enumerate()
-        .map(|(idx, service)| Service::from(idx, proto, service, info))
+        .map(|(idx, service)| Service::from(proto, service, idx, info))
         .collect::<Vec<_>>();
 
     Ok(Page { services }.render()?)
@@ -224,7 +237,7 @@ fn main() -> Result<()> {
                 let content = Some(format_proto(proto)?);
 
                 Ok(File {
-                    name: Some(format!("{}.md", name.replace("/", "."))),
+                    name: Some(format!("{}.md", name.replace('/', "."))),
                     insertion_point: None,
                     content,
                     generated_code_info: None,

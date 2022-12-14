@@ -17,9 +17,17 @@
 
 {{ method.description }}
 
-**Input : `{{ method.input_type|rtrim_before('.') }}`**
+#### Input
 
-**Output : `{{ method.output_type|rtrim_before('.') }}`**
+```proto
+message {{ method.input_type.name }} {}
+```
+
+#### Output
+
+```proto
+message {{ method.output_type.name }} {}
+```
 
 {% endfor %}
 {% endfor %}
