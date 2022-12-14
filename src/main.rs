@@ -11,6 +11,25 @@ use std::convert::From;
 use std::fmt::Display;
 use std::io::{Read, Write};
 
+/// What the generator should generate. If the options is not set it will generate multiple pages.
+enum Mode {
+    /// Single page with the file name carried inside the enum value.
+    SinglePage(String),
+    /// Multiple pages, names are derived from the proto file descriptors by replacing slashes with
+    /// dots and appending .md.
+    MultiPage,
+}
+
+impl From<&CodeGeneratorRequest> for Mode {
+    fn from(request: &CodeGeneratorRequest) -> Self {
+        if let Some(name) = &request.parameter {
+            Mode::SinglePage(name.to_string())
+        } else {
+            Mode::MultiPage
+        }
+    }
+}
+
 enum CallType {
     Unary,
     ServerStreaming,
@@ -146,34 +165,58 @@ fn format_proto(proto: &FileDescriptorProto) -> Result<String> {
     Ok(MarkdownTemplate { services }.render()?)
 }
 
+/// Retrieve descriptor proto `name` from `request.
+fn get_proto<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<&'a FileDescriptorProto> {
+    request
+        .proto_file
+        .iter()
+        .find(|p| p.name() == name)
+        .ok_or_else(|| anyhow!("{name} not found"))
+}
+
 fn main() -> Result<()> {
     let mut buf = Vec::new();
     std::io::stdin().read_to_end(&mut buf)?;
 
     let request = CodeGeneratorRequest::decode(&*buf)?;
-    let mut content = String::new();
 
-    for name in &request.file_to_generate {
-        let proto = request
-            .proto_file
+    let file = match Mode::from(&request) {
+        Mode::SinglePage(name) => {
+            let mut content = String::new();
+
+            for name in &request.file_to_generate {
+                let proto = get_proto(&request, name)?;
+                content.push_str(&format_proto(proto)?);
+            }
+
+            vec![File {
+                name: Some(name),
+                insertion_point: None,
+                content: Some(content),
+                generated_code_info: None,
+            }]
+        }
+        Mode::MultiPage => request
+            .file_to_generate
             .iter()
-            .find(|p| p.name() == name)
-            .ok_or_else(|| anyhow!("{name} not found"))?;
+            .map(|name| {
+                let proto = get_proto(&request, name)?;
+                let content = Some(format_proto(proto)?);
 
-        content.push_str(&format_proto(proto)?);
-    }
-
-    let file = File {
-        name: Some("proto.md".to_string()),
-        insertion_point: None,
-        content: Some(content),
-        generated_code_info: None,
+                Ok(File {
+                    name: Some(format!("{}.md", name.replace("/", "."))),
+                    insertion_point: None,
+                    content,
+                    generated_code_info: None,
+                })
+            })
+            .collect::<Result<Vec<_>, anyhow::Error>>()?,
     };
 
     let response = CodeGeneratorResponse {
         error: None,
         supported_features: Some(Feature::Proto3Optional as u64),
-        file: vec![file],
+        file,
     };
 
     buf.clear();
