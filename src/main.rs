@@ -5,8 +5,7 @@ use prost_types::compiler::code_generator_response::{Feature, File};
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
 use prost_types::source_code_info::Location;
 use prost_types::{
-    DescriptorProto, FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto,
-    SourceCodeInfo,
+    FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto, SourceCodeInfo,
 };
 use std::convert::From;
 use std::fmt::Display;
@@ -62,11 +61,27 @@ impl Display for CallType {
 
 struct MessageType<'a> {
     name: &'a str,
+    description: &'a str,
 }
 
 impl<'a> MessageType<'a> {
-    fn from(typ: &'a DescriptorProto) -> Self {
-        Self { name: typ.name() }
+    /// Construct message type matching `name`.
+    fn from(proto: &'a FileDescriptorProto, name: &str, info: &'a SourceCodeInfo) -> Self {
+        proto
+            .message_type
+            .iter()
+            .enumerate()
+            .find_map(|(idx, m)| {
+                name.ends_with(m.name()).then(|| {
+                    let description = get_description(get_location(info, &[4, idx as i32]));
+
+                    Self {
+                        name: m.name(),
+                        description,
+                    }
+                })
+            })
+            .unwrap()
     }
 }
 
@@ -91,19 +106,8 @@ impl<'a> Method<'a> {
         let description = get_description(get_location(info, path));
         path.pop();
 
-        let input_type = proto
-            .message_type
-            .iter()
-            .find(|m| method.input_type().ends_with(m.name()))
-            .map(MessageType::from)
-            .unwrap();
-
-        let output_type = proto
-            .message_type
-            .iter()
-            .find(|m| method.output_type().ends_with(m.name()))
-            .map(MessageType::from)
-            .unwrap();
+        let input_type = MessageType::from(proto, method.input_type(), info);
+        let output_type = MessageType::from(proto, method.output_type(), info);
 
         let deprecated = method
             .options

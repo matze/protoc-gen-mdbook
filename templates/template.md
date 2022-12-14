@@ -19,11 +19,15 @@
 
 #### Input
 
+{{ method.input_type.description }}
+
 ```proto
 message {{ method.input_type.name }} {}
 ```
 
 #### Output
+
+{{ method.output_type.description }}
 
 ```proto
 message {{ method.output_type.name }} {}
