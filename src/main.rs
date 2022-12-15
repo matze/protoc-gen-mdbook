@@ -65,8 +65,8 @@ struct MessageType<'a> {
 }
 
 impl<'a> MessageType<'a> {
-    /// Construct message type matching `name`.
-    fn from(proto: &'a FileDescriptorProto, name: &str, info: &'a SourceCodeInfo) -> Self {
+    /// Construct message type matching `name` or a sensible default if it cannot be found.
+    fn from(proto: &'a FileDescriptorProto, name: &'a str, info: &'a SourceCodeInfo) -> Self {
         proto
             .message_type
             .iter()
@@ -81,7 +81,10 @@ impl<'a> MessageType<'a> {
                     }
                 })
             })
-            .unwrap()
+            .unwrap_or(Self {
+                name,
+                description: "",
+            })
     }
 }
 
