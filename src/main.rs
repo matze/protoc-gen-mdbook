@@ -3,7 +3,6 @@ use askama::Template;
 use prost::Message;
 use prost_types::compiler::code_generator_response::{Feature, File};
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
-use prost_types::source_code_info::Location;
 use prost_types::{
     FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto, SourceCodeInfo,
 };
@@ -73,7 +72,7 @@ impl<'a> MessageType<'a> {
             .enumerate()
             .find_map(|(idx, m)| {
                 name.ends_with(m.name()).then(|| {
-                    let description = get_description(get_location(info, &[4, idx as i32]));
+                    let description = get_description(info, &[4, idx as i32]);
 
                     Self {
                         name: m.name(),
@@ -106,7 +105,7 @@ impl<'a> Method<'a> {
         info: &'a SourceCodeInfo,
     ) -> Self {
         path.push(idx);
-        let description = get_description(get_location(info, path));
+        let description = get_description(info, path);
         path.pop();
 
         let input_type = MessageType::from(proto, method.input_type(), info);
@@ -143,12 +142,12 @@ struct Page<'a> {
     services: Vec<Service<'a>>,
 }
 
-fn get_location<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> Option<&'a Location> {
-    info.location.iter().find(|l| l.path == *path)
-}
-
-fn get_description(location: Option<&Location>) -> &str {
-    location.map_or_else(|| "", |l| l.leading_comments())
+/// Get leading comments for the given `path` or empty string if not found matching.
+fn get_description<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> &'a str {
+    info.location
+        .iter()
+        .find(|l| l.path == *path)
+        .map_or_else(|| "", |l| l.leading_comments())
 }
 
 impl<'a> Service<'a> {
@@ -159,8 +158,6 @@ impl<'a> Service<'a> {
         info: &'a SourceCodeInfo,
     ) -> Self {
         let mut path = vec![6, idx as i32];
-
-        let location = get_location(info, &path);
 
         let deprecated = service
             .options
@@ -182,7 +179,7 @@ impl<'a> Service<'a> {
         Self {
             name: service.name(),
             package: proto.package(),
-            description: get_description(location),
+            description: get_description(info, &path),
             deprecated,
             methods,
         }
