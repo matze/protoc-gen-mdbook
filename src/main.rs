@@ -3,8 +3,10 @@ use askama::Template;
 use prost::Message;
 use prost_types::compiler::code_generator_response::{Feature, File};
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
+use prost_types::field_descriptor_proto as fdp;
 use prost_types::{
-    FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto, SourceCodeInfo,
+    FieldDescriptorProto, FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto,
+    SourceCodeInfo,
 };
 use std::convert::From;
 use std::fmt::Display;
@@ -58,9 +60,64 @@ impl Display for CallType {
     }
 }
 
+struct Field<'a> {
+    name: &'a str,
+    type_name: &'a str,
+    number: i32,
+}
+
+fn scalar_type_name(typ: fdp::Type) -> &'static str {
+    match typ {
+        fdp::Type::Double => "double",
+        fdp::Type::Float => "float",
+        fdp::Type::Int64 => "int64",
+        fdp::Type::Uint64 => "uint64",
+        fdp::Type::Int32 => "int32",
+        fdp::Type::Fixed32 => "fixed32",
+        fdp::Type::Fixed64 => "fixed64",
+        fdp::Type::Bool => "bool",
+        fdp::Type::String => "string",
+        fdp::Type::Group => "group",
+        fdp::Type::Message => "",
+        fdp::Type::Bytes => "bytes",
+        fdp::Type::Uint32 => "uint32",
+        fdp::Type::Enum => "enum",
+        fdp::Type::Sfixed32 => "sfixed32",
+        fdp::Type::Sfixed64 => "sfixed64",
+        fdp::Type::Sint32 => "sint32",
+        fdp::Type::Sint64 => "sint64",
+    }
+}
+
+impl<'a> Field<'a> {
+    /// Construct field.
+    fn from(field: &'a FieldDescriptorProto, package: &str) -> Self {
+        let type_name = if field.type_name.is_some() {
+            let name = field.type_name();
+
+            // If the name is fully qualified and matches the current file descriptor package, then
+            // strip it.
+            if name[1..].starts_with(package) {
+                &name[package.len() + 2..]
+            } else {
+                name
+            }
+        } else {
+            scalar_type_name(field.r#type())
+        };
+
+        Self {
+            name: field.name(),
+            type_name,
+            number: field.number(),
+        }
+    }
+}
+
 struct MessageType<'a> {
     name: &'a str,
     description: &'a str,
+    fields: Vec<Field<'a>>,
 }
 
 impl<'a> MessageType<'a> {
@@ -74,15 +131,25 @@ impl<'a> MessageType<'a> {
                 name.ends_with(m.name()).then(|| {
                     let description = get_description(info, &[4, idx as i32]);
 
+                    let mut fields = m
+                        .field
+                        .iter()
+                        .map(|f| Field::from(f, proto.package()))
+                        .collect::<Vec<_>>();
+
+                    fields.sort_by(|a, b| a.number.cmp(&b.number));
+
                     Self {
                         name: m.name(),
                         description,
+                        fields,
                     }
                 })
             })
             .unwrap_or(Self {
                 name,
                 description: "",
+                fields: vec![],
             })
     }
 }
