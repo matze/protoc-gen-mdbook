@@ -65,6 +65,8 @@ struct Field<'a> {
     type_name: &'a str,
     number: i32,
     optional: bool,
+    leading_comments: &'a str,
+    trailing_comments: &'a str,
 }
 
 fn scalar_type_name(typ: fdp::Type) -> &'static str {
@@ -101,20 +103,46 @@ fn strip_qualified_package_name<'a, 'b>(maybe_qualified: &'a str, package: &'b s
     }
 }
 
+mod filters {
+    /// Split lines in `s` and prepend each line with `//` and join back.
+    pub fn render_multiline_comment<T: std::fmt::Display>(s: T) -> askama::Result<String> {
+        Ok(s.to_string()
+            .lines()
+            .map(|s| {
+                let mut s = s.to_string();
+                s.insert_str(0, "//");
+                s
+            })
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+
 impl<'a> Field<'a> {
     /// Construct field.
-    fn from(field: &'a FieldDescriptorProto, package: &str) -> Self {
+    fn from(
+        field: &'a FieldDescriptorProto,
+        package: &str,
+        info: &'a SourceCodeInfo,
+        path: &[i32],
+    ) -> Self {
         let type_name = if field.type_name.is_some() {
             strip_qualified_package_name(field.type_name(), package)
         } else {
             scalar_type_name(field.r#type())
         };
 
+        let location = info.location.iter().find(|l| l.path == *path);
+        let leading_comments = location.map_or_else(|| "", |l| l.leading_comments());
+        let trailing_comments = location.map_or_else(|| "", |l| l.trailing_comments());
+
         Self {
             name: field.name(),
             type_name,
             number: field.number(),
             optional: field.proto3_optional(),
+            leading_comments,
+            trailing_comments,
         }
     }
 }
@@ -134,12 +162,14 @@ impl<'a> MessageType<'a> {
             .enumerate()
             .find_map(|(idx, m)| {
                 name.ends_with(m.name()).then(|| {
-                    let description = get_description(info, &[4, idx as i32]);
+                    let idx = idx as i32;
+                    let description = get_description(info, &[4, idx]);
 
                     let mut fields = m
                         .field
                         .iter()
-                        .map(|f| Field::from(f, proto.package()))
+                        .enumerate()
+                        .map(|(i, f)| Field::from(f, proto.package(), info, &[4, idx, 2, i as i32]))
                         .collect::<Vec<_>>();
 
                     fields.sort_by(|a, b| a.number.cmp(&b.number));
@@ -331,6 +361,7 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::filters::render_multiline_comment;
     use super::strip_qualified_package_name as strip;
 
     #[test]
@@ -338,5 +369,13 @@ mod tests {
         assert_eq!(strip(".foo.bar.Baz", "foo.bar"), "Baz");
         assert_eq!(strip(".foo.qux.Baz", "foo.bar"), ".foo.qux.Baz");
         assert_eq!(strip("Baz", "foo.bar"), "Baz");
+    }
+
+    #[test]
+    fn render_multiline_comments() {
+        assert_eq!(
+            render_multiline_comment("foo\nbar").unwrap(),
+            "//foo\n//bar"
+        );
     }
 }

@@ -4,7 +4,13 @@ message {{ t.name }} {}
 {% else %}
 message {{ t.name }} {
 {%- for field in t.fields %}
-  {% if field.optional %}optional {% endif %}{{ field.type_name }} {{ field.name }} = {{ field.number }};
+  {% if field.leading_comments != "" -%}
+  {{ field.leading_comments|render_multiline_comment|indent(2) }}
+  {%- endif -%}
+  {% if field.optional %}
+  optional
+  {%- endif %} {{ field.type_name }} {{ field.name }} = {{ field.number }}; {% if field.trailing_comments != "" %} // {{- field.trailing_comments -}}
+  {% endif %}
 {%- endfor %}
 }
 {% endif -%}

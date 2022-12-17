@@ -15,7 +15,9 @@ message HealthCheckResponse {
     NOT_SERVING = 2;
     SERVICE_UNKNOWN = 3;  // Used only by the Watch method.
   }
-  optional ServingStatus status = 1;
+  // Comment in front.
+  // Multiple lines.
+  optional ServingStatus status = 1;  // just one line.
 }
 
 // A Health service.
