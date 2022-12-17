@@ -1,3 +1,15 @@
+{% macro message_type(t) %}
+{%- if t.fields.is_empty() %}
+message {{ t.name }} {}
+{% else %}
+message {{ t.name }} {
+{%- for field in t.fields %}
+  {% if field.optional %}optional {% endif %}{{ field.type_name }} {{ field.name }} = {{ field.number }};
+{%- endfor %}
+}
+{% endif -%}
+{% endmacro %}
+
 {% for service in services %}
 ## {{ service.package }}.{{ service.name }}
 
@@ -22,15 +34,7 @@
 {{ method.input_type.description }}
 
 ```proto
-{%- if method.input_type.fields.is_empty() %}
-message {{ method.input_type.name }} {}
-{% else %}
-message {{ method.input_type.name }} {
-{%- for field in method.input_type.fields %}
-  {{ field.type_name }} {{ field.name }} = {{ field.number }};
-{%- endfor %}
-}
-{% endif -%}
+{%- call message_type(method.input_type) -%}
 ```
 
 **Output**
@@ -38,15 +42,7 @@ message {{ method.input_type.name }} {
 {{ method.output_type.description }}
 
 ```proto
-{%- if method.output_type.fields.is_empty() %}
-message {{ method.output_type.name }} {}
-{% else %}
-message {{ method.output_type.name }} {
-{%- for field in method.output_type.fields %}
-  {{ field.type_name }} {{ field.name }} = {{ field.number }};
-{%- endfor %}
-}
-{% endif -%}
+{%- call message_type(method.output_type) -%}
 ```
 
 {% endfor %}

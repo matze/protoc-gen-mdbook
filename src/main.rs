@@ -64,6 +64,7 @@ struct Field<'a> {
     name: &'a str,
     type_name: &'a str,
     number: i32,
+    optional: bool,
 }
 
 fn scalar_type_name(typ: fdp::Type) -> &'static str {
@@ -113,6 +114,7 @@ impl<'a> Field<'a> {
             name: field.name(),
             type_name,
             number: field.number(),
+            optional: field.proto3_optional(),
         }
     }
 }
