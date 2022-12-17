@@ -9,3 +9,7 @@ askama = "0"
 bytes = "1"
 prost = "0.11"
 prost-types = "0.11"
+
+[profile.release]
+strip = "debuginfo"
+lto = "fat"
