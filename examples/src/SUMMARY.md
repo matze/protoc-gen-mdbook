@@ -1,3 +1,0 @@
-# Summary
-
-- [Services](./proto.md)
