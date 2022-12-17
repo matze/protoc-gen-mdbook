@@ -89,19 +89,22 @@ fn scalar_type_name(typ: fdp::Type) -> &'static str {
     }
 }
 
+/// Strip `package` name from `maybe_qualified` in case they match.
+fn strip_qualified_package_name<'a, 'b>(maybe_qualified: &'a str, package: &'b str) -> &'a str {
+    // Fully qualified package names start with a leading dot, so ignore that for the match.
+    if maybe_qualified[1..].starts_with(package) {
+        // Remove the package name as well as the leading and the final dot.
+        &maybe_qualified[package.len() + 2..]
+    } else {
+        maybe_qualified
+    }
+}
+
 impl<'a> Field<'a> {
     /// Construct field.
     fn from(field: &'a FieldDescriptorProto, package: &str) -> Self {
         let type_name = if field.type_name.is_some() {
-            let name = field.type_name();
-
-            // If the name is fully qualified and matches the current file descriptor package, then
-            // strip it.
-            if name[1..].starts_with(package) {
-                &name[package.len() + 2..]
-            } else {
-                name
-            }
+            strip_qualified_package_name(field.type_name(), package)
         } else {
             scalar_type_name(field.r#type())
         };
@@ -322,4 +325,16 @@ fn main() -> Result<()> {
     std::io::stdout().write_all(&buf)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_qualified_package_name as strip;
+
+    #[test]
+    fn strip_package_name() {
+        assert_eq!(strip(".foo.bar.Baz", "foo.bar"), "Baz");
+        assert_eq!(strip(".foo.qux.Baz", "foo.bar"), ".foo.qux.Baz");
+        assert_eq!(strip("Baz", "foo.bar"), "Baz");
+    }
 }
