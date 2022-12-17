@@ -12,6 +12,10 @@ pages with
 
     $ protoc --mdbook_out=. path/to/*.proto
 
+Note that you need a custom version of [highlight.js](https://highlightjs.org)
+that includes support for protocol buffers if you want the rendered message
+types to be syntax highlighted.
+
 
 ## Option
 

@@ -33,7 +33,7 @@ message {{ t.name }} {
 
 {{ method.input_type.description }}
 
-```proto
+```protobuf
 {%- call message_type(method.input_type) -%}
 ```
 
@@ -41,7 +41,7 @@ message {{ t.name }} {
 
 {{ method.output_type.description }}
 
-```proto
+```protobuf
 {%- call message_type(method.output_type) -%}
 ```
 
