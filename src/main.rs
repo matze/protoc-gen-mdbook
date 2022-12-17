@@ -253,7 +253,14 @@ impl<'a> Service<'a> {
     }
 }
 
-fn format_proto(proto: &FileDescriptorProto) -> Result<String> {
+/// Format the file descriptor proto found under `name`.
+fn format_proto<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<String> {
+    let proto = request
+        .proto_file
+        .iter()
+        .find(|p| p.name() == name)
+        .ok_or_else(|| anyhow!("{name} not found"))?;
+
     let info = proto
         .source_code_info
         .as_ref()
@@ -269,15 +276,6 @@ fn format_proto(proto: &FileDescriptorProto) -> Result<String> {
     Ok(Page { services }.render()?)
 }
 
-/// Retrieve descriptor proto `name` from `request.
-fn get_proto<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<&'a FileDescriptorProto> {
-    request
-        .proto_file
-        .iter()
-        .find(|p| p.name() == name)
-        .ok_or_else(|| anyhow!("{name} not found"))
-}
-
 fn main() -> Result<()> {
     let mut buf = Vec::new();
     std::io::stdin().read_to_end(&mut buf)?;
@@ -289,29 +287,25 @@ fn main() -> Result<()> {
             let mut content = String::new();
 
             for name in &request.file_to_generate {
-                let proto = get_proto(&request, name)?;
-                content.push_str(&format_proto(proto)?);
+                content.push_str(&format_proto(&request, name)?);
             }
 
             vec![File {
                 name: Some(name),
-                insertion_point: None,
                 content: Some(content),
-                generated_code_info: None,
+                ..Default::default()
             }]
         }
         Mode::MultiPage => request
             .file_to_generate
             .iter()
             .map(|name| {
-                let proto = get_proto(&request, name)?;
-                let content = Some(format_proto(proto)?);
+                let content = Some(format_proto(&request, name)?);
 
                 Ok(File {
                     name: Some(format!("{}.md", name.replace('/', "."))),
-                    insertion_point: None,
                     content,
-                    generated_code_info: None,
+                    ..Default::default()
                 })
             })
             .collect::<Result<Vec<_>, anyhow::Error>>()?,
