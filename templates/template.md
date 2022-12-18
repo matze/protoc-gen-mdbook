@@ -26,10 +26,7 @@ message {{ t.name }} {
 {% for method in service.methods %}
 ### `{{ method.name }}()`
 
-<kbd>{{ method.call_type }}</kbd>
-{%- if method.deprecated -%}
-<kbd>deprecated</kbd>
-{%- endif %}
+<kbd>{{ method.call_type }}</kbd>{% if method.deprecated %} <kbd>deprecated</kbd>{% endif %}
 
 {{ method.description }}
 
