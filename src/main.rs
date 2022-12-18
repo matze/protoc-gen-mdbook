@@ -288,8 +288,8 @@ impl<'a> Service<'a> {
     }
 }
 
-/// Format the file descriptor proto found under `name`.
-fn format_proto<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<String> {
+/// Construct all `Service`s of file descriptor `name` in `request`.
+fn get_services<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<Vec<Service<'a>>> {
     let proto = request
         .proto_file
         .iter()
@@ -308,7 +308,7 @@ fn format_proto<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<Str
         .map(|(idx, service)| Service::from(proto, service, idx, info))
         .collect::<Vec<_>>();
 
-    Ok(Page { services }.render()?)
+    Ok(services)
 }
 
 fn main() -> Result<()> {
@@ -322,7 +322,8 @@ fn main() -> Result<()> {
             let mut content = String::new();
 
             for name in &request.file_to_generate {
-                content.push_str(&format_proto(&request, name)?);
+                let services = get_services(&request, name)?;
+                content.push_str(&Page { services }.render()?);
             }
 
             vec![File {
@@ -335,7 +336,8 @@ fn main() -> Result<()> {
             .file_to_generate
             .iter()
             .map(|name| {
-                let content = Some(format_proto(&request, name)?);
+                let services = get_services(&request, name)?;
+                let content = Some(Page { services }.render()?);
 
                 Ok(File {
                     name: Some(format!("{}.md", name.replace('/', "."))),
