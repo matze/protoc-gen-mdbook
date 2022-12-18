@@ -23,6 +23,14 @@ message {{ t.name }} {
 
 {{ service.description }}
 
+{% if service.methods.len() > 2 %}
+### Methods
+
+{% for method in service.methods %}
+<a href="#{{ method.name|lower }}">`{{ method.name }}()`</a>
+{% endfor %}
+{% endif %}
+
 {% for method in service.methods %}
 ### `{{ method.name }}()`
 
