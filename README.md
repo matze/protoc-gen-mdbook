@@ -4,6 +4,13 @@ A protoc plugin to generate [mdBook](https://rust-lang.github.io/mdBook/) pages
 documenting services and related messages.
 
 
+## Build
+
+Install a recent Rust toolchain and build the binary with
+
+    $ cargo b --release
+
+
 ## Usage
 
 Like every protoc plugin, `protoc-gen-mdbook` must be in your `PATH` and can be
