@@ -93,7 +93,7 @@ pub fn get_services<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result
         .service
         .iter()
         .enumerate()
-        .map(|(idx, service)| Service::from(proto, service, idx, info))
+        .map(|(idx, service)| Service::from(proto, service, as_i32(idx), info))
         .collect::<Vec<_>>();
 
     Ok(services)
@@ -116,6 +116,12 @@ fn strip_qualified_package_name<'a, 'b>(maybe_qualified: &'a str, package: &'b s
     } else {
         maybe_qualified
     }
+}
+
+/// Helper function to cast from guaranteed 31 bit usize to i32
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+fn as_i32(idx: usize) -> i32 {
+    idx as i32
 }
 
 impl From<&MethodDescriptorProto> for CallType {
@@ -178,14 +184,16 @@ impl<'a> MessageType<'a> {
             .enumerate()
             .find_map(|(idx, m)| {
                 name.ends_with(m.name()).then(|| {
-                    let idx = idx as i32;
+                    let idx = as_i32(idx);
                     let description = get_description(info, &[4, idx]);
 
                     let mut fields = m
                         .field
                         .iter()
                         .enumerate()
-                        .map(|(i, f)| Field::from(f, proto.package(), info, &[4, idx, 2, i as i32]))
+                        .map(|(i, f)| {
+                            Field::from(f, proto.package(), info, &[4, idx, 2, as_i32(i)])
+                        })
                         .collect::<Vec<_>>();
 
                     fields.sort_by(|a, b| a.number.cmp(&b.number));
@@ -241,10 +249,10 @@ impl<'a> Service<'a> {
     fn from(
         proto: &'a FileDescriptorProto,
         service: &'a ServiceDescriptorProto,
-        idx: usize,
+        idx: i32,
         info: &'a SourceCodeInfo,
     ) -> Self {
-        let mut path = vec![6, idx as i32];
+        let mut path = vec![6, idx];
 
         let deprecated = service
             .options
@@ -258,7 +266,7 @@ impl<'a> Service<'a> {
             .method
             .iter()
             .enumerate()
-            .map(|(idx, method)| Method::from(proto, method, &mut path, idx as i32, info))
+            .map(|(idx, method)| Method::from(proto, method, &mut path, as_i32(idx), info))
             .collect::<Vec<_>>();
 
         path.pop();

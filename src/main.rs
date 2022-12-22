@@ -10,6 +10,7 @@ mod proto;
 
 mod filters {
     /// Split lines in `s` and prepend each line with `//` and join back.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn render_multiline_comment<T: std::fmt::Display>(s: T) -> askama::Result<String> {
         Ok(s.to_string()
             .lines()
