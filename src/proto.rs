@@ -12,11 +12,72 @@ use std::collections::HashMap;
 /// Maps from package name to all included message types.
 pub type AllTypes<'a> = HashMap<String, Vec<MessageType<'a>>>;
 
+/// A fully qualified type name including package path and leading dot.
+pub struct FullyQualifiedTypeName<'a> {
+    #[allow(dead_code)]
+    original: &'a str,
+    /// Package path without the leading dot
+    package: &'a str,
+    /// Just the type name without the package path
+    name: &'a str,
+}
+
+impl<'a> From<&'a str> for FullyQualifiedTypeName<'a> {
+    fn from(original: &'a str) -> Self {
+        let start = original.find('.').unwrap();
+        let end = original.rfind('.').unwrap();
+
+        Self {
+            original,
+            package: &original[start + 1..end],
+            name: &original[end + 1..],
+        }
+    }
+}
+
+impl<'a> From<&'a FieldDescriptorProto> for FullyQualifiedTypeName<'a> {
+    fn from(value: &'a FieldDescriptorProto) -> Self {
+        Self::from(value.type_name())
+    }
+}
+
+/// Custom message type consisting of a fully qualified name.
+pub struct CustomType<'a> {
+    pub name: FullyQualifiedTypeName<'a>,
+}
+
+/// Field type which is either a well-known proto type or a custom message type.
+pub enum FieldType<'a> {
+    WellKnown(fdp::Type),
+    Custom(CustomType<'a>),
+}
+
+impl<'a> FieldType<'a> {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::WellKnown(typ) => scalar_type_name(*typ),
+            Self::Custom(typ) => typ.name.name,
+        }
+    }
+}
+
+impl<'a> From<&'a FieldDescriptorProto> for FieldType<'a> {
+    fn from(field: &'a FieldDescriptorProto) -> Self {
+        if field.type_name.is_some() {
+            // unsafe: we do not yet guarantee that the field contains a leading dot.
+            FieldType::Custom(CustomType {
+                name: FullyQualifiedTypeName::from(field),
+            })
+        } else {
+            FieldType::WellKnown(field.r#type())
+        }
+    }
+}
+
 /// Field type found in messages.
-#[derive(Debug)]
 pub struct Field<'a> {
     pub name: &'a str,
-    pub type_name: &'a str,
+    pub typ: FieldType<'a>,
     pub number: i32,
     pub optional: bool,
     pub leading_comments: &'a str,
@@ -24,7 +85,6 @@ pub struct Field<'a> {
 }
 
 /// Message types referenced as inputs and outputs in methods.
-#[derive(Debug)]
 pub struct MessageType<'a> {
     pub name: &'a str,
     pub description: &'a str,
@@ -94,7 +154,7 @@ pub fn get_message_types(request: &CodeGeneratorRequest) -> AllTypes {
             .message_type
             .iter()
             .enumerate()
-            .map(|(idx, mt)| MessageType::from(package, mt, as_i32(idx), info))
+            .map(|(idx, mt)| MessageType::from(mt, as_i32(idx), info))
             .collect::<Vec<MessageType>>();
 
         result.insert(package.to_string(), types);
@@ -138,25 +198,6 @@ fn get_description<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> &'a str {
         .map_or_else(|| "", |l| l.leading_comments())
 }
 
-/// Strip `package` name from `maybe_qualified` in case they match.
-fn strip_qualified_package_name<'a, 'b>(maybe_qualified: &'a str, package: &'b str) -> &'a str {
-    // Fully qualified package names start with a leading dot, so ignore that for the match.
-    if maybe_qualified[1..].starts_with(package) {
-        // Remove the package name as well as the leading and the final dot.
-        &maybe_qualified[package.len() + 2..]
-    } else {
-        maybe_qualified
-    }
-}
-
-/// Return package name for fully qualified typename without the leading dot, i.e. `foo.bar` for
-/// `.foo.bar.Baz`.
-fn extract_package_name(type_name: &str) -> &str {
-    let start = type_name.find('.').unwrap_or(0);
-    let end = type_name.rfind('.').unwrap_or(type_name.len() - 1);
-    &type_name[start + 1..end]
-}
-
 /// Helper function to cast from guaranteed 31 bit usize to i32
 #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 fn as_i32(idx: usize) -> i32 {
@@ -187,25 +228,15 @@ impl std::fmt::Display for CallType {
 
 impl<'a> Field<'a> {
     /// Construct field.
-    fn from(
-        field: &'a FieldDescriptorProto,
-        package: &str,
-        info: &'a SourceCodeInfo,
-        path: &[i32],
-    ) -> Self {
-        let type_name = if field.type_name.is_some() {
-            strip_qualified_package_name(field.type_name(), package)
-        } else {
-            scalar_type_name(field.r#type())
-        };
-
+    fn from(field: &'a FieldDescriptorProto, info: &'a SourceCodeInfo, path: &[i32]) -> Self {
+        let typ = FieldType::from(field);
         let location = info.location.iter().find(|l| l.path == *path);
         let leading_comments = location.map_or_else(|| "", |l| l.leading_comments());
         let trailing_comments = location.map_or_else(|| "", |l| l.trailing_comments());
 
         Self {
             name: field.name(),
-            type_name,
+            typ,
             number: field.number(),
             optional: field.proto3_optional(),
             leading_comments,
@@ -216,19 +247,14 @@ impl<'a> Field<'a> {
 
 impl<'a> MessageType<'a> {
     /// Construct message type matching `name` or a sensible default if it cannot be found.
-    fn from(
-        package: &str,
-        message_type: &'a DescriptorProto,
-        idx: i32,
-        info: &'a SourceCodeInfo,
-    ) -> Self {
+    fn from(message_type: &'a DescriptorProto, idx: i32, info: &'a SourceCodeInfo) -> Self {
         let description = get_description(info, &[4, idx]);
 
         let mut fields = message_type
             .field
             .iter()
             .enumerate()
-            .map(|(i, f)| Field::from(f, package, info, &[4, idx, 2, as_i32(i)]))
+            .map(|(i, f)| Field::from(f, info, &[4, idx, 2, as_i32(i)]))
             .collect::<Vec<_>>();
 
         fields.sort_by(|a, b| a.number.cmp(&b.number));
@@ -253,14 +279,12 @@ impl<'a> Method<'a> {
         let description = get_description(info, path);
         path.pop();
 
-        let package = extract_package_name(method.input_type());
-        let types = types.get(package).unwrap();
+        let name = FullyQualifiedTypeName::from(method.input_type());
+        let types = types.get(name.package).unwrap();
+        let input_type = types.iter().find(|ty| ty.name == name.name).unwrap();
 
-        let input_type_name = strip_qualified_package_name(method.input_type(), package);
-        let input_type = types.iter().find(|ty| ty.name == input_type_name).unwrap();
-
-        let output_type_name = strip_qualified_package_name(method.output_type(), package);
-        let output_type = types.iter().find(|ty| ty.name == output_type_name).unwrap();
+        let name = FullyQualifiedTypeName::from(method.output_type());
+        let output_type = types.iter().find(|ty| ty.name == name.name).unwrap();
 
         let deprecated = method
             .options
@@ -318,18 +342,12 @@ impl<'a> Service<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_package_name as extract;
-    use super::strip_qualified_package_name as strip;
+    use super::FullyQualifiedTypeName;
 
     #[test]
-    fn strip_package_name() {
-        assert_eq!(strip(".foo.bar.Baz", "foo.bar"), "Baz");
-        assert_eq!(strip(".foo.qux.Baz", "foo.bar"), ".foo.qux.Baz");
-        assert_eq!(strip("Baz", "foo.bar"), "Baz");
-    }
-
-    #[test]
-    fn extract_package_name() {
-        assert_eq!(extract(".foo.bar.Baz"), "foo.bar");
+    fn fully_qualified_type_name_processing() {
+        let name = FullyQualifiedTypeName::from(".foo.bar.Baz");
+        assert_eq!(name.package, "foo.bar");
+        assert_eq!(name.name, "Baz");
     }
 }
