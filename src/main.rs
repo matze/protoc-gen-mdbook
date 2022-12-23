@@ -3,32 +3,10 @@ use askama::Template;
 use prost::Message;
 use prost_types::compiler::code_generator_response::{Feature, File};
 use prost_types::compiler::{CodeGeneratorRequest, CodeGeneratorResponse};
-use proto::{get_services, Service};
 use std::io::{Read, Write};
 
 mod proto;
-
-mod filters {
-    /// Split lines in `s` and prepend each line with `//` and join back.
-    #[allow(clippy::unnecessary_wraps)]
-    pub fn render_multiline_comment<T: std::fmt::Display>(s: T) -> askama::Result<String> {
-        Ok(s.to_string()
-            .lines()
-            .map(|s| {
-                let mut s = s.to_string();
-                s.insert_str(0, "//");
-                s
-            })
-            .collect::<Vec<_>>()
-            .join("\n"))
-    }
-}
-
-#[derive(Template)]
-#[template(path = "template.md")]
-struct Page<'a> {
-    services: Vec<Service<'a>>,
-}
+mod render;
 
 /// Generate single page named `name` containing all services from all proto files.
 fn generate_single_page(request: &CodeGeneratorRequest, name: &str) -> Result<Vec<File>> {
@@ -36,8 +14,8 @@ fn generate_single_page(request: &CodeGeneratorRequest, name: &str) -> Result<Ve
     let types = proto::get_message_types(request);
 
     for name in &request.file_to_generate {
-        let services = get_services(request, name, &types)?;
-        content.push_str(&Page { services }.render()?);
+        let services = proto::get_services(request, name, &types)?;
+        content.push_str(&render::Page::from(services).render()?);
     }
 
     Ok(vec![File {
@@ -55,8 +33,8 @@ fn generate_multiple_pages(request: &CodeGeneratorRequest) -> Result<Vec<File>> 
         .file_to_generate
         .iter()
         .map(|name| {
-            let services = get_services(request, name, &types)?;
-            let content = Some(Page { services }.render()?);
+            let services = proto::get_services(request, name, &types)?;
+            let content = Some(render::Page::from(services).render()?);
 
             Ok(File {
                 name: Some(format!("{}.md", name.replace('/', "."))),
@@ -90,17 +68,4 @@ fn main() -> Result<()> {
     std::io::stdout().write_all(&buf)?;
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::filters::render_multiline_comment;
-
-    #[test]
-    fn render_multiline_comments() {
-        assert_eq!(
-            render_multiline_comment("foo\nbar").unwrap(),
-            "//foo\n//bar"
-        );
-    }
 }
