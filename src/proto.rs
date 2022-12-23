@@ -15,11 +15,11 @@ pub type AllTypes<'a> = HashMap<String, Vec<MessageType<'a>>>;
 /// A fully qualified type name including package path and leading dot.
 pub struct FullyQualifiedTypeName<'a> {
     #[allow(dead_code)]
-    original: &'a str,
+    pub original: &'a str,
     /// Package path without the leading dot
-    package: &'a str,
+    pub package: &'a str,
     /// Just the type name without the package path
-    name: &'a str,
+    pub name: &'a str,
 }
 
 impl<'a> From<&'a str> for FullyQualifiedTypeName<'a> {

@@ -40,19 +40,23 @@ message {{ t.name }} {
 
 **Input**
 
-{{ method.input_type.description }}
+{% for t in method.input_types %}
+{{ t.description }}
 
 ```protobuf
-{%- call message_type(method.input_type) -%}
+{%- call message_type(t) -%}
 ```
+{% endfor %}
 
 **Output**
 
-{{ method.output_type.description }}
+{% for t in method.output_types %}
+{{ t.description }}
 
 ```protobuf
-{%- call message_type(method.output_type) -%}
+{%- call message_type(t) -%}
 ```
+{% endfor %}
 
 {% endfor %}
 {% endfor %}

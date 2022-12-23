@@ -15,7 +15,7 @@ fn generate_single_page(request: &CodeGeneratorRequest, name: &str) -> Result<Ve
 
     for name in &request.file_to_generate {
         let services = proto::get_services(request, name, &types)?;
-        content.push_str(&render::Page::from(services).render()?);
+        content.push_str(&render::Page::from(services, &types).render()?);
     }
 
     Ok(vec![File {
@@ -34,7 +34,7 @@ fn generate_multiple_pages(request: &CodeGeneratorRequest) -> Result<Vec<File>> 
         .iter()
         .map(|name| {
             let services = proto::get_services(request, name, &types)?;
-            let content = Some(render::Page::from(services).render()?);
+            let content = Some(render::Page::from(services, &types).render()?);
 
             Ok(File {
                 name: Some(format!("{}.md", name.replace('/', "."))),
