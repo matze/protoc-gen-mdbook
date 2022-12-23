@@ -150,14 +150,17 @@ pub fn get_message_types(request: &CodeGeneratorRequest) -> AllTypes {
         let package = proto.package();
         let info = proto.source_code_info.as_ref().unwrap();
 
-        let types = proto
+        let mut types = proto
             .message_type
             .iter()
             .enumerate()
             .map(|(idx, mt)| MessageType::from(mt, as_i32(idx), info))
             .collect::<Vec<MessageType>>();
 
-        result.insert(package.to_string(), types);
+        result
+            .entry(package.to_string())
+            .or_insert(vec![])
+            .append(&mut types);
     }
 
     result
