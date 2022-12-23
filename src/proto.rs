@@ -4,11 +4,16 @@ use anyhow::{anyhow, Result};
 use prost_types::compiler::CodeGeneratorRequest;
 use prost_types::field_descriptor_proto as fdp;
 use prost_types::{
-    FieldDescriptorProto, FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto,
-    SourceCodeInfo,
+    DescriptorProto, FieldDescriptorProto, FileDescriptorProto, MethodDescriptorProto,
+    ServiceDescriptorProto, SourceCodeInfo,
 };
+use std::collections::HashMap;
+
+/// Maps from package name to all included message types.
+pub type AllTypes<'a> = HashMap<String, Vec<MessageType<'a>>>;
 
 /// Field type found in messages.
+#[derive(Debug)]
 pub struct Field<'a> {
     pub name: &'a str,
     pub type_name: &'a str,
@@ -19,6 +24,7 @@ pub struct Field<'a> {
 }
 
 /// Message types referenced as inputs and outputs in methods.
+#[derive(Debug)]
 pub struct MessageType<'a> {
     pub name: &'a str,
     pub description: &'a str,
@@ -39,8 +45,8 @@ pub struct Method<'a> {
     pub call_type: CallType,
     pub description: &'a str,
     pub deprecated: bool,
-    pub input_type: MessageType<'a>,
-    pub output_type: MessageType<'a>,
+    pub input_type: &'a MessageType<'a>,
+    pub output_type: &'a MessageType<'a>,
 }
 
 /// gRPC service type.
@@ -76,8 +82,33 @@ fn scalar_type_name(typ: fdp::Type) -> &'static str {
     }
 }
 
+/// Return all message types for all compiled protos mapped from their package tree.
+pub fn get_message_types(request: &CodeGeneratorRequest) -> AllTypes {
+    let mut result: HashMap<String, Vec<MessageType>> = HashMap::new();
+
+    for proto in &request.proto_file {
+        let package = proto.package();
+        let info = proto.source_code_info.as_ref().unwrap();
+
+        let types = proto
+            .message_type
+            .iter()
+            .enumerate()
+            .map(|(idx, mt)| MessageType::from(package, mt, as_i32(idx), info))
+            .collect::<Vec<MessageType>>();
+
+        result.insert(package.to_string(), types);
+    }
+
+    result
+}
+
 /// Construct all `Service`s of file descriptor `name` in `request`.
-pub fn get_services<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result<Vec<Service<'a>>> {
+pub fn get_services<'a>(
+    request: &'a CodeGeneratorRequest,
+    name: &str,
+    types: &'a AllTypes,
+) -> Result<Vec<Service<'a>>> {
     let proto = request
         .proto_file
         .iter()
@@ -93,7 +124,7 @@ pub fn get_services<'a>(request: &'a CodeGeneratorRequest, name: &str) -> Result
         .service
         .iter()
         .enumerate()
-        .map(|(idx, service)| Service::from(proto, service, as_i32(idx), info))
+        .map(|(idx, service)| Service::from(proto, service, types, as_i32(idx), info))
         .collect::<Vec<_>>();
 
     Ok(services)
@@ -116,6 +147,14 @@ fn strip_qualified_package_name<'a, 'b>(maybe_qualified: &'a str, package: &'b s
     } else {
         maybe_qualified
     }
+}
+
+/// Return package name for fully qualified typename without the leading dot, i.e. `foo.bar` for
+/// `.foo.bar.Baz`.
+fn extract_package_name(type_name: &str) -> &str {
+    let start = type_name.find('.').unwrap_or(0);
+    let end = type_name.rfind('.').unwrap_or(type_name.len() - 1);
+    &type_name[start + 1..end]
 }
 
 /// Helper function to cast from guaranteed 31 bit usize to i32
@@ -177,46 +216,35 @@ impl<'a> Field<'a> {
 
 impl<'a> MessageType<'a> {
     /// Construct message type matching `name` or a sensible default if it cannot be found.
-    fn from(proto: &'a FileDescriptorProto, name: &'a str, info: &'a SourceCodeInfo) -> Self {
-        proto
-            .message_type
+    fn from(
+        package: &str,
+        message_type: &'a DescriptorProto,
+        idx: i32,
+        info: &'a SourceCodeInfo,
+    ) -> Self {
+        let description = get_description(info, &[4, idx]);
+
+        let mut fields = message_type
+            .field
             .iter()
             .enumerate()
-            .find_map(|(idx, m)| {
-                name.ends_with(m.name()).then(|| {
-                    let idx = as_i32(idx);
-                    let description = get_description(info, &[4, idx]);
+            .map(|(i, f)| Field::from(f, package, info, &[4, idx, 2, as_i32(i)]))
+            .collect::<Vec<_>>();
 
-                    let mut fields = m
-                        .field
-                        .iter()
-                        .enumerate()
-                        .map(|(i, f)| {
-                            Field::from(f, proto.package(), info, &[4, idx, 2, as_i32(i)])
-                        })
-                        .collect::<Vec<_>>();
+        fields.sort_by(|a, b| a.number.cmp(&b.number));
 
-                    fields.sort_by(|a, b| a.number.cmp(&b.number));
-
-                    Self {
-                        name: m.name(),
-                        description,
-                        fields,
-                    }
-                })
-            })
-            .unwrap_or(Self {
-                name,
-                description: "",
-                fields: vec![],
-            })
+        Self {
+            name: message_type.name(),
+            description,
+            fields,
+        }
     }
 }
 
 impl<'a> Method<'a> {
     fn from(
-        proto: &'a FileDescriptorProto,
         method: &'a MethodDescriptorProto,
+        types: &'a AllTypes,
         path: &mut Vec<i32>,
         idx: i32,
         info: &'a SourceCodeInfo,
@@ -225,8 +253,14 @@ impl<'a> Method<'a> {
         let description = get_description(info, path);
         path.pop();
 
-        let input_type = MessageType::from(proto, method.input_type(), info);
-        let output_type = MessageType::from(proto, method.output_type(), info);
+        let package = extract_package_name(method.input_type());
+        let types = types.get(package).unwrap();
+
+        let input_type_name = strip_qualified_package_name(method.input_type(), package);
+        let input_type = types.iter().find(|ty| ty.name == input_type_name).unwrap();
+
+        let output_type_name = strip_qualified_package_name(method.output_type(), package);
+        let output_type = types.iter().find(|ty| ty.name == output_type_name).unwrap();
 
         let deprecated = method
             .options
@@ -249,6 +283,7 @@ impl<'a> Service<'a> {
     fn from(
         proto: &'a FileDescriptorProto,
         service: &'a ServiceDescriptorProto,
+        types: &'a AllTypes,
         idx: i32,
         info: &'a SourceCodeInfo,
     ) -> Self {
@@ -266,7 +301,7 @@ impl<'a> Service<'a> {
             .method
             .iter()
             .enumerate()
-            .map(|(idx, method)| Method::from(proto, method, &mut path, as_i32(idx), info))
+            .map(|(idx, method)| Method::from(method, types, &mut path, as_i32(idx), info))
             .collect::<Vec<_>>();
 
         path.pop();
@@ -283,6 +318,7 @@ impl<'a> Service<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::extract_package_name as extract;
     use super::strip_qualified_package_name as strip;
 
     #[test]
@@ -290,5 +326,10 @@ mod tests {
         assert_eq!(strip(".foo.bar.Baz", "foo.bar"), "Baz");
         assert_eq!(strip(".foo.qux.Baz", "foo.bar"), ".foo.qux.Baz");
         assert_eq!(strip("Baz", "foo.bar"), "Baz");
+    }
+
+    #[test]
+    fn extract_package_name() {
+        assert_eq!(extract(".foo.bar.Baz"), "foo.bar");
     }
 }
