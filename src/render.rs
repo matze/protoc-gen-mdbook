@@ -34,10 +34,14 @@ fn gather_types<'a>(
 
     for field in &typ.fields {
         if let proto::FieldType::Custom(custom) = &field.typ {
-            for custom_type in types.get(custom.name.package).unwrap() {
-                if custom_type.name == field.typ.name() {
-                    result.push(custom_type);
-                    result.append(&mut gather_types(custom_type, types));
+            // We should be able to unwrap here but we get false package names for nested message
+            // types, so work around for now.
+            if let Some(custom_types) = types.get(custom.name.package) {
+                for custom_type in custom_types {
+                    if custom_type.name == field.typ.name() {
+                        result.push(custom_type);
+                        result.append(&mut gather_types(custom_type, types));
+                    }
                 }
             }
         }
