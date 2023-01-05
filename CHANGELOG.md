@@ -7,6 +7,7 @@
 - Emit all related message input/output types, i.e. if a message embeds another
   one, emit that as well.
 - Refactor internal structure for type safety and clearer layering.
+- Group deprecated methods.
 
 
 ## 1.0.0

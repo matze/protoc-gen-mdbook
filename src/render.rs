@@ -16,6 +16,7 @@ struct Service<'a> {
     description: &'a str,
     deprecated: bool,
     methods: Vec<Method<'a>>,
+    deprecated_methods: Vec<Method<'a>>,
 }
 
 #[derive(Template)]
@@ -73,11 +74,11 @@ impl<'a> Method<'a> {
 
 impl<'a> Service<'a> {
     fn from(value: proto::Service<'a>, types: &'a proto::AllTypes) -> Self {
-        let methods = value
+        let (deprecated_methods, methods) = value
             .methods
             .into_iter()
             .map(|m| Method::from(m, types))
-            .collect();
+            .partition(|m| m.deprecated);
 
         Self {
             name: value.name,
@@ -85,6 +86,7 @@ impl<'a> Service<'a> {
             description: value.description,
             deprecated: value.deprecated,
             methods,
+            deprecated_methods,
         }
     }
 }

@@ -31,6 +31,13 @@ message {{ t.name }} {
 {% endfor %}
 {% endif %}
 
+{% if !service.deprecated_methods.is_empty() %}
+#### Deprecated
+{% for method in service.deprecated_methods %}
+<a href="#{{ method.name|lower }}">`{{ method.name }}()`</a>
+{% endfor %}
+{% endif %}
+
 {% for method in service.methods %}
 ### `{{ method.name }}()`
 
@@ -57,6 +64,34 @@ message {{ t.name }} {
 {%- call message_type(t) -%}
 ```
 {% endfor %}
-
 {% endfor %}
+
+{% for method in service.deprecated_methods %}
+### `{{ method.name }}()`
+
+<kbd>{{ method.call_type }}</kbd>{% if method.deprecated %} <kbd>deprecated</kbd>{% endif %}
+
+{{ method.description }}
+
+**Input**
+
+{% for t in method.input_types %}
+{{ t.description }}
+
+```protobuf
+{%- call message_type(t) -%}
+```
+{% endfor %}
+
+**Output**
+
+{% for t in method.output_types %}
+{{ t.description }}
+
+```protobuf
+{%- call message_type(t) -%}
+```
+{% endfor %}
+{% endfor %}
+
 {% endfor %}
