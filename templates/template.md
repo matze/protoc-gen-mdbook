@@ -7,7 +7,7 @@ message {{ t.name }} {
   {% if field.leading_comments != "" -%}
   {{ field.leading_comments|render_multiline_comment|indent(2) }}
   {%- endif %}
-  {% if field.optional %}optional {% endif %}{{ field.typ.name() }} {{ field.name }} = {{ field.number }}; {% if field.trailing_comments != "" %} // {{- field.trailing_comments -}}
+  {% if field.optional %}optional {% endif %}{% if field.repeated %}repeated {% endif %}{{ field.typ.name() }} {{ field.name }} = {{ field.number }}; {% if field.trailing_comments != "" %} // {{- field.trailing_comments -}}
   {% endif %}
 {%- endfor %}
 }

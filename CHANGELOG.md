@@ -9,6 +9,10 @@
 - Refactor internal structure for type safety and clearer layering.
 - Group deprecated methods.
 
+### Fixed
+
+- Emit `repeated` labels.
+
 
 ## 1.0.0
 

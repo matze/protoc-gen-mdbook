@@ -80,6 +80,7 @@ pub struct Field<'a> {
     pub typ: FieldType<'a>,
     pub number: i32,
     pub optional: bool,
+    pub repeated: bool,
     pub leading_comments: &'a str,
     pub trailing_comments: &'a str,
 }
@@ -236,12 +237,16 @@ impl<'a> Field<'a> {
         let location = info.location.iter().find(|l| l.path == *path);
         let leading_comments = location.map_or_else(|| "", |l| l.leading_comments());
         let trailing_comments = location.map_or_else(|| "", |l| l.trailing_comments());
+        let repeated = field
+            .label
+            .map_or(false, |l| l == fdp::Label::Repeated.into());
 
         Self {
             name: field.name(),
             typ,
             number: field.number(),
             optional: field.proto3_optional(),
+            repeated,
             leading_comments,
             trailing_comments,
         }
