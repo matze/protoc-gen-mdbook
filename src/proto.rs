@@ -159,7 +159,7 @@ pub fn get_message_types(request: &CodeGeneratorRequest) -> AllTypes {
 
         result
             .entry(package.to_string())
-            .or_insert(vec![])
+            .or_default()
             .append(&mut types);
     }
 
