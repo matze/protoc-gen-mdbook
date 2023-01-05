@@ -199,7 +199,7 @@ fn get_description<'a>(info: &'a SourceCodeInfo, path: &[i32]) -> &'a str {
     info.location
         .iter()
         .find(|l| l.path == *path)
-        .map_or_else(|| "", |l| l.leading_comments())
+        .map_or("", |l| l.leading_comments())
 }
 
 /// Helper function to cast from guaranteed 31 bit usize to i32
@@ -235,8 +235,8 @@ impl<'a> Field<'a> {
     fn from(field: &'a FieldDescriptorProto, info: &'a SourceCodeInfo, path: &[i32]) -> Self {
         let typ = FieldType::from(field);
         let location = info.location.iter().find(|l| l.path == *path);
-        let leading_comments = location.map_or_else(|| "", |l| l.leading_comments());
-        let trailing_comments = location.map_or_else(|| "", |l| l.trailing_comments());
+        let leading_comments = location.map_or("", |l| l.leading_comments());
+        let trailing_comments = location.map_or("", |l| l.trailing_comments());
         let repeated = field
             .label
             .map_or(false, |l| l == fdp::Label::Repeated.into());
