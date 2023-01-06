@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+
+## 1.1.0
+
+**2023-01-06**
+
 ### Changed
 
 - Emit all related message input/output types, i.e. if a message embeds another
