@@ -4,13 +4,29 @@ use anyhow::{anyhow, Result};
 use prost_types::compiler::CodeGeneratorRequest;
 use prost_types::field_descriptor_proto as fdp;
 use prost_types::{
-    DescriptorProto, FieldDescriptorProto, FileDescriptorProto, MethodDescriptorProto,
-    ServiceDescriptorProto, SourceCodeInfo,
+    DescriptorProto, EnumDescriptorProto, EnumValueDescriptorProto, FieldDescriptorProto,
+    FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto, SourceCodeInfo,
 };
 use std::collections::HashMap;
 
-/// Maps from package name to all included message types.
-pub type AllTypes<'a> = HashMap<String, Vec<MessageType<'a>>>;
+/// Wrap message and enum types for generic rendering.
+pub enum Types<'a> {
+    Message(MessageType<'a>),
+    Enum(EnumType<'a>),
+}
+
+impl<'a> Types<'a> {
+    /// Return `true` if `name` matches.
+    pub fn has_name(&self, name: &str) -> bool {
+        match self {
+            Types::Message(ty) => ty.name == name,
+            Types::Enum(ty) => ty.name == name,
+        }
+    }
+}
+
+/// Maps from package name to all included enum and message types.
+pub type AllTypes<'a> = HashMap<String, Vec<Types<'a>>>;
 
 /// A fully qualified type name including package path and leading dot.
 pub struct FullyQualifiedTypeName<'a> {
@@ -92,6 +108,21 @@ pub struct MessageType<'a> {
     pub fields: Vec<Field<'a>>,
 }
 
+/// Enum value types.
+pub struct EnumValue<'a> {
+    pub name: &'a str,
+    pub number: i32,
+    pub leading_comments: &'a str,
+    pub trailing_comments: &'a str,
+}
+
+/// Enum types.
+pub struct EnumType<'a> {
+    pub name: &'a str,
+    pub description: &'a str,
+    pub values: Vec<EnumValue<'a>>,
+}
+
 /// Streaming call type of a method.
 pub enum CallType {
     Unary,
@@ -106,8 +137,8 @@ pub struct Method<'a> {
     pub call_type: CallType,
     pub description: &'a str,
     pub deprecated: bool,
-    pub input_type: &'a MessageType<'a>,
-    pub output_type: &'a MessageType<'a>,
+    pub input_type: &'a Types<'a>,
+    pub output_type: &'a Types<'a>,
 }
 
 /// gRPC service type.
@@ -144,24 +175,36 @@ fn scalar_type_name(typ: fdp::Type) -> &'static str {
 }
 
 /// Return all message types for all compiled protos mapped from their package tree.
-pub fn get_message_types(request: &CodeGeneratorRequest) -> AllTypes {
-    let mut result: HashMap<String, Vec<MessageType>> = HashMap::new();
+pub fn get_types(request: &CodeGeneratorRequest) -> AllTypes {
+    let mut result: HashMap<String, Vec<Types>> = HashMap::new();
 
     for proto in &request.proto_file {
         let package = proto.package();
         let info = proto.source_code_info.as_ref().unwrap();
 
-        let mut types = proto
+        let mut message_types = proto
             .message_type
             .iter()
             .enumerate()
-            .map(|(idx, mt)| MessageType::from(mt, as_i32(idx), info))
-            .collect::<Vec<MessageType>>();
+            .map(|(idx, ty)| Types::Message(MessageType::from(ty, as_i32(idx), info)))
+            .collect::<Vec<Types>>();
 
         result
             .entry(package.to_string())
             .or_default()
-            .append(&mut types);
+            .append(&mut message_types);
+
+        let mut enum_types = proto
+            .enum_type
+            .iter()
+            .enumerate()
+            .map(|(idx, ty)| Types::Enum(EnumType::from(ty, as_i32(idx), info)))
+            .collect::<Vec<Types>>();
+
+        result
+            .entry(package.to_string())
+            .or_default()
+            .append(&mut enum_types);
     }
 
     result
@@ -254,7 +297,7 @@ impl<'a> Field<'a> {
 }
 
 impl<'a> MessageType<'a> {
-    /// Construct message type matching `name` or a sensible default if it cannot be found.
+    /// Construct message type.
     fn from(message_type: &'a DescriptorProto, idx: i32, info: &'a SourceCodeInfo) -> Self {
         let description = get_description(info, &[4, idx]);
 
@@ -275,6 +318,44 @@ impl<'a> MessageType<'a> {
     }
 }
 
+impl<'a> EnumValue<'a> {
+    /// Construct field.
+    fn from(value: &'a EnumValueDescriptorProto, info: &'a SourceCodeInfo, path: &[i32]) -> Self {
+        let location = info.location.iter().find(|l| l.path == *path);
+        let leading_comments = location.map_or("", |l| l.leading_comments());
+        let trailing_comments = location.map_or("", |l| l.trailing_comments().trim_end());
+
+        Self {
+            name: value.name(),
+            number: value.number(),
+            leading_comments,
+            trailing_comments,
+        }
+    }
+}
+
+impl<'a> EnumType<'a> {
+    /// Construct enum type.
+    fn from(enum_type: &'a EnumDescriptorProto, idx: i32, info: &'a SourceCodeInfo) -> Self {
+        let description = get_description(info, &[5, idx]);
+
+        let mut values = enum_type
+            .value
+            .iter()
+            .enumerate()
+            .map(|(i, v)| EnumValue::from(v, info, &[5, idx, 2, as_i32(i)]))
+            .collect::<Vec<_>>();
+
+        values.sort_by(|a, b| a.number.cmp(&b.number));
+
+        Self {
+            name: enum_type.name(),
+            description,
+            values,
+        }
+    }
+}
+
 impl<'a> Method<'a> {
     fn from(
         method: &'a MethodDescriptorProto,
@@ -289,10 +370,10 @@ impl<'a> Method<'a> {
 
         let name = FullyQualifiedTypeName::from(method.input_type());
         let types = types.get(name.package).unwrap();
-        let input_type = types.iter().find(|ty| ty.name == name.name).unwrap();
+        let input_type = types.iter().find(|ty| ty.has_name(name.name)).unwrap();
 
         let name = FullyQualifiedTypeName::from(method.output_type());
-        let output_type = types.iter().find(|ty| ty.name == name.name).unwrap();
+        let output_type = types.iter().find(|ty| ty.has_name(name.name)).unwrap();
 
         let deprecated = method
             .options

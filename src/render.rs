@@ -6,8 +6,8 @@ struct Method<'a> {
     call_type: proto::CallType,
     description: &'a str,
     deprecated: bool,
-    input_types: Vec<&'a proto::MessageType<'a>>,
-    output_types: Vec<&'a proto::MessageType<'a>>,
+    input_types: Vec<&'a proto::Types<'a>>,
+    output_types: Vec<&'a proto::Types<'a>>,
 }
 
 struct Service<'a> {
@@ -25,27 +25,29 @@ pub struct Page<'a> {
     services: Vec<Service<'a>>,
 }
 
-/// Descend field message types starting from `typ` recursively and return them.
+/// Descend field message types starting from `ty` recursively and return them.
 #[must_use]
-fn gather_types<'a>(
-    typ: &proto::MessageType,
-    types: &'a proto::AllTypes,
-) -> Vec<&'a proto::MessageType<'a>> {
+fn gather_types<'a>(ty: &'a proto::Types, types: &'a proto::AllTypes) -> Vec<&'a proto::Types<'a>> {
     let mut result = vec![];
 
-    for field in &typ.fields {
-        if let proto::FieldType::Custom(custom) = &field.typ {
-            // We should be able to unwrap here but we get false package names for nested message
-            // types, so work around for now.
-            if let Some(custom_types) = types.get(custom.name.package) {
-                for custom_type in custom_types {
-                    if custom_type.name == field.typ.name() {
-                        result.push(custom_type);
-                        result.append(&mut gather_types(custom_type, types));
+    match ty {
+        proto::Types::Message(ty) => {
+            for field in &ty.fields {
+                if let proto::FieldType::Custom(custom) = &field.typ {
+                    // We should be able to unwrap here but we get false package names for nested message
+                    // types, so work around for now.
+                    if let Some(custom_types) = types.get(custom.name.package) {
+                        for custom_type in custom_types {
+                            if custom_type.has_name(field.typ.name()) {
+                                result.push(custom_type);
+                                result.append(&mut gather_types(custom_type, types));
+                            }
+                        }
                     }
                 }
             }
         }
+        proto::Types::Enum(_) => {}
     }
 
     result

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Render enum types.
+
 
 ## 1.1.0
 

@@ -11,7 +11,7 @@ mod render;
 /// Generate single page named `name` containing all services from all proto files.
 fn generate_single_page(request: &CodeGeneratorRequest, name: &str) -> Result<Vec<File>> {
     let mut content = String::new();
-    let types = proto::get_message_types(request);
+    let types = proto::get_types(request);
 
     for name in &request.file_to_generate {
         let services = proto::get_services(request, name, &types)?;
@@ -27,7 +27,7 @@ fn generate_single_page(request: &CodeGeneratorRequest, name: &str) -> Result<Ve
 
 /// Generate pages for each proto file containing all service documentations of that proto file.
 fn generate_multiple_pages(request: &CodeGeneratorRequest) -> Result<Vec<File>> {
-    let types = proto::get_message_types(request);
+    let types = proto::get_types(request);
 
     request
         .file_to_generate

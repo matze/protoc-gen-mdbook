@@ -14,6 +14,37 @@ message {{ t.name }} {
 {% endif -%}
 {% endmacro %}
 
+{% macro enum_type(t) %}
+enum {{ t.name }} {
+{%- for value in t.values -%}
+  {% if value.leading_comments != "" %}
+  {{ value.leading_comments|render_multiline_comment|indent(2) }}
+  {%- endif %}
+  {{ value.name }} = {{ value.number }}; {% if value.trailing_comments != "" %} // {{- value.trailing_comments -}} {%- endif -%}
+{%- endfor %}
+}
+{% endmacro %}
+
+{% macro render_type(t) %}
+{%- match t -%}
+  {%- when proto::Types::Message with (t) -%}
+    {{ t.description }}
+  {%- when proto::Types::Enum with (t) -%}
+    {{ t.description }}
+  {%- else -%}
+{%- endmatch -%}
+
+```protobuf
+{%- match t -%}
+  {%- when proto::Types::Message with (t) -%}
+    {%- call message_type(t) -%}
+  {%- when proto::Types::Enum with (t) -%}
+    {%- call enum_type(t) -%}
+  {%- else -%}
+{%- endmatch -%}
+```
+{% endmacro %}
+
 {% for service in services %}
 ## {{ service.package }}.{{ service.name }}
 
@@ -48,21 +79,13 @@ message {{ t.name }} {
 **Input**
 
 {% for t in method.input_types %}
-{{ t.description }}
-
-```protobuf
-{%- call message_type(t) -%}
-```
+{%- call render_type(t) -%}
 {% endfor %}
 
 **Output**
 
 {% for t in method.output_types %}
-{{ t.description }}
-
-```protobuf
-{%- call message_type(t) -%}
-```
+{%- call render_type(t) -%}
 {% endfor %}
 {% endfor %}
 
@@ -76,21 +99,13 @@ message {{ t.name }} {
 **Input**
 
 {% for t in method.input_types %}
-{{ t.description }}
-
-```protobuf
-{%- call message_type(t) -%}
-```
+{%- call render_type(t) -%}
 {% endfor %}
 
 **Output**
 
 {% for t in method.output_types %}
-{{ t.description }}
-
-```protobuf
-{%- call message_type(t) -%}
-```
+{%- call render_type(t) -%}
 {% endfor %}
 {% endfor %}
 
