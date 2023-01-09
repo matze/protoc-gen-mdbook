@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+
+## 1.2.0
+
+**2023-01-09**
+
 ### Changed
 
 - Render enum types.
