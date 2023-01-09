@@ -30,24 +30,21 @@ pub struct Page<'a> {
 fn gather_types<'a>(ty: &'a proto::Types, types: &'a proto::AllTypes) -> Vec<&'a proto::Types<'a>> {
     let mut result = vec![];
 
-    match ty {
-        proto::Types::Message(ty) => {
-            for field in &ty.fields {
-                if let proto::FieldType::Custom(custom) = &field.typ {
-                    // We should be able to unwrap here but we get false package names for nested message
-                    // types, so work around for now.
-                    if let Some(custom_types) = types.get(custom.name.package) {
-                        for custom_type in custom_types {
-                            if custom_type.has_name(field.typ.name()) {
-                                result.push(custom_type);
-                                result.append(&mut gather_types(custom_type, types));
-                            }
+    if let proto::Types::Message(ty) = ty {
+        for field in &ty.fields {
+            if let proto::FieldType::Custom(custom) = &field.typ {
+                // We should be able to unwrap here but we get false package names for nested message
+                // types, so work around for now.
+                if let Some(custom_types) = types.get(custom.name.package) {
+                    for custom_type in custom_types {
+                        if custom_type.has_name(field.typ.name()) {
+                            result.push(custom_type);
+                            result.append(&mut gather_types(custom_type, types));
                         }
                     }
                 }
             }
         }
-        proto::Types::Enum(_) => {}
     }
 
     result
