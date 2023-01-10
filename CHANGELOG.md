@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+
+## 1.2.1
+
+**2023-01-10**
+
 ### Fixed
 
 - Do not render duplicate items for the same message (e.g. using the same enum
