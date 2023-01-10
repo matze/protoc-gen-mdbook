@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Do not render duplicate items for the same message (e.g. using the same enum
+  multiple times for different purposes).
+
 
 ## 1.2.0
 

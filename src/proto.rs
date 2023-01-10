@@ -10,6 +10,7 @@ use prost_types::{
 use std::collections::HashMap;
 
 /// Wrap message and enum types for generic rendering.
+#[derive(PartialEq)]
 pub enum Types<'a> {
     Message(MessageType<'a>),
     Enum(EnumType<'a>),
@@ -29,6 +30,7 @@ impl<'a> Types<'a> {
 pub type AllTypes<'a> = HashMap<String, Vec<Types<'a>>>;
 
 /// A fully qualified type name including package path and leading dot.
+#[derive(PartialEq)]
 pub struct FullyQualifiedTypeName<'a> {
     #[allow(dead_code)]
     pub original: &'a str,
@@ -58,11 +60,13 @@ impl<'a> From<&'a FieldDescriptorProto> for FullyQualifiedTypeName<'a> {
 }
 
 /// Custom message type consisting of a fully qualified name.
+#[derive(PartialEq)]
 pub struct CustomType<'a> {
     pub name: FullyQualifiedTypeName<'a>,
 }
 
 /// Field type which is either a well-known proto type or a custom message type.
+#[derive(PartialEq)]
 pub enum FieldType<'a> {
     WellKnown(fdp::Type),
     Custom(CustomType<'a>),
@@ -91,6 +95,7 @@ impl<'a> From<&'a FieldDescriptorProto> for FieldType<'a> {
 }
 
 /// Field type found in messages.
+#[derive(PartialEq)]
 pub struct Field<'a> {
     pub name: &'a str,
     pub typ: FieldType<'a>,
@@ -102,6 +107,7 @@ pub struct Field<'a> {
 }
 
 /// Message types referenced as inputs and outputs in methods.
+#[derive(PartialEq)]
 pub struct MessageType<'a> {
     pub name: &'a str,
     pub description: &'a str,
@@ -109,6 +115,7 @@ pub struct MessageType<'a> {
 }
 
 /// Enum value types.
+#[derive(PartialEq)]
 pub struct EnumValue<'a> {
     pub name: &'a str,
     pub number: i32,
@@ -117,6 +124,7 @@ pub struct EnumValue<'a> {
 }
 
 /// Enum types.
+#[derive(PartialEq)]
 pub struct EnumType<'a> {
     pub name: &'a str,
     pub description: &'a str,

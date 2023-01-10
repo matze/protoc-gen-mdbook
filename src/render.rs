@@ -37,7 +37,8 @@ fn gather_types<'a>(ty: &'a proto::Types, types: &'a proto::AllTypes) -> Vec<&'a
                 // types, so work around for now.
                 if let Some(custom_types) = types.get(custom.name.package) {
                     for custom_type in custom_types {
-                        if custom_type.has_name(field.typ.name()) {
+                        if custom_type.has_name(field.typ.name()) && !result.contains(&custom_type)
+                        {
                             result.push(custom_type);
                             result.append(&mut gather_types(custom_type, types));
                         }
