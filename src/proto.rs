@@ -75,8 +75,8 @@ pub enum FieldType<'a> {
 impl<'a> FieldType<'a> {
     pub fn name(&self) -> &str {
         match self {
-            Self::WellKnown(typ) => scalar_type_name(*typ),
-            Self::Custom(typ) => typ.name.name,
+            Self::WellKnown(ty) => scalar_type_name(*ty),
+            Self::Custom(ty) => ty.name.name,
         }
     }
 }
@@ -98,7 +98,7 @@ impl<'a> From<&'a FieldDescriptorProto> for FieldType<'a> {
 #[derive(PartialEq)]
 pub struct Field<'a> {
     pub name: &'a str,
-    pub typ: FieldType<'a>,
+    pub ty: FieldType<'a>,
     pub number: i32,
     pub optional: bool,
     pub repeated: bool,
@@ -159,8 +159,8 @@ pub struct Service<'a> {
 }
 
 /// Get proto type name as found in .proto files.
-fn scalar_type_name(typ: fdp::Type) -> &'static str {
-    match typ {
+fn scalar_type_name(ty: fdp::Type) -> &'static str {
+    match ty {
         fdp::Type::Double => "double",
         fdp::Type::Float => "float",
         fdp::Type::Int64 => "int64",
@@ -284,7 +284,7 @@ impl std::fmt::Display for CallType {
 impl<'a> Field<'a> {
     /// Construct field.
     fn from(field: &'a FieldDescriptorProto, info: &'a SourceCodeInfo, path: &[i32]) -> Self {
-        let typ = FieldType::from(field);
+        let ty = FieldType::from(field);
         let location = info.location.iter().find(|l| l.path == *path);
         let leading_comments = location.map_or("", |l| l.leading_comments());
         let trailing_comments = location.map_or("", |l| l.trailing_comments());
@@ -294,7 +294,7 @@ impl<'a> Field<'a> {
 
         Self {
             name: field.name(),
-            typ,
+            ty,
             number: field.number(),
             optional: field.proto3_optional(),
             repeated,
