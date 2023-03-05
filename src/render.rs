@@ -101,7 +101,7 @@ impl<'a> Page<'a> {
     }
 }
 
-mod filters {
+pub mod filters {
     /// Split lines in `s` and prepend each line with `//` and join back.
     #[allow(clippy::unnecessary_wraps)]
     pub fn render_multiline_comment<T: std::fmt::Display>(s: T) -> askama::Result<String> {
@@ -114,6 +114,18 @@ mod filters {
             })
             .collect::<Vec<_>>()
             .join("\n"))
+    }
+
+    /// Create string with spaces two times `s`
+    #[allow(clippy::unnecessary_wraps, clippy::trivially_copy_pass_by_ref)]
+    pub fn lead(s: &usize) -> askama::Result<String> {
+        let mut result = String::with_capacity(s * 2);
+
+        for _ in 0..*s {
+            result.push_str("  ");
+        }
+
+        Ok(result)
     }
 }
 

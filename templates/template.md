@@ -1,19 +1,3 @@
-{% macro message_type(t) %}
-{%- if t.fields.is_empty() %}
-message {{ t.name }} {}
-{% else %}
-message {{ t.name }} {
-{%- for field in t.fields %}
-  {% if field.leading_comments != "" -%}
-  {{ field.leading_comments|render_multiline_comment|indent(2) }}
-  {%- endif %}
-  {% if field.optional %}optional {% endif %}{% if field.repeated %}repeated {% endif %}{{ field.ty.name() }} {{ field.name }} = {{ field.number }}; {% if field.trailing_comments != "" %} // {{- field.trailing_comments -}}
-  {% endif %}
-{%- endfor %}
-}
-{% endif -%}
-{% endmacro %}
-
 {% macro enum_type(t) %}
 enum {{ t.name }} {
 {%- for value in t.values -%}
@@ -37,7 +21,7 @@ enum {{ t.name }} {
 ```protobuf
 {%- match t -%}
   {%- when proto::Types::Message with (t) -%}
-    {%- call message_type(t) -%}
+    {{ t.render().unwrap() }}
   {%- when proto::Types::Enum with (t) -%}
     {%- call enum_type(t) -%}
   {%- else -%}

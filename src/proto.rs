@@ -1,6 +1,8 @@
 //! Higher level wrapper types for the *Proto types from proto-types.
 
+use crate::render::filters;
 use anyhow::{anyhow, Result};
+use askama::Template;
 use prost_types::compiler::CodeGeneratorRequest;
 use prost_types::field_descriptor_proto as fdp;
 use prost_types::{
@@ -107,11 +109,14 @@ pub struct Field<'a> {
 }
 
 /// Message types referenced as inputs and outputs in methods.
-#[derive(PartialEq)]
+#[derive(PartialEq, Template)]
+#[template(path = "message_type.md", escape = "none")]
 pub struct MessageType<'a> {
     pub name: &'a str,
     pub description: &'a str,
     pub fields: Vec<Field<'a>>,
+    pub nested: Vec<MessageType<'a>>,
+    pub depth: usize,
 }
 
 /// Enum value types.
@@ -194,7 +199,7 @@ pub fn get_types(request: &CodeGeneratorRequest) -> AllTypes {
             .message_type
             .iter()
             .enumerate()
-            .map(|(idx, ty)| Types::Message(MessageType::from(ty, as_i32(idx), info)))
+            .map(|(idx, ty)| Types::Message(MessageType::from(ty, as_i32(idx), info, 0)))
             .collect::<Vec<Types>>();
 
         result
@@ -306,7 +311,12 @@ impl<'a> Field<'a> {
 
 impl<'a> MessageType<'a> {
     /// Construct message type.
-    fn from(message_type: &'a DescriptorProto, idx: i32, info: &'a SourceCodeInfo) -> Self {
+    fn from(
+        message_type: &'a DescriptorProto,
+        idx: i32,
+        info: &'a SourceCodeInfo,
+        depth: usize,
+    ) -> Self {
         let description = get_description(info, &[4, idx]);
 
         let mut fields = message_type
@@ -318,10 +328,18 @@ impl<'a> MessageType<'a> {
 
         fields.sort_by(|a, b| a.number.cmp(&b.number));
 
+        let nested = message_type
+            .nested_type
+            .iter()
+            .map(|d| MessageType::from(d, idx, info, depth + 1))
+            .collect();
+
         Self {
             name: message_type.name(),
             description,
             fields,
+            nested,
+            depth,
         }
     }
 }

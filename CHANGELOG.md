@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Render nested message types.
+
 
 ## 1.2.1
 
