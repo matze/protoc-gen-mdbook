@@ -1,4 +1,4 @@
-use crate::proto;
+use crate::{proto, Options};
 use askama::Template;
 
 struct Method<'a> {
@@ -23,6 +23,7 @@ struct Service<'a> {
 #[template(path = "template.md")]
 pub struct Page<'a> {
     services: Vec<Service<'a>>,
+    options: &'a Options,
 }
 
 /// Descend field message types starting from `ty` recursively and return them.
@@ -91,13 +92,17 @@ impl<'a> Service<'a> {
 }
 
 impl<'a> Page<'a> {
-    pub fn from(services: Vec<proto::Service<'a>>, types: &'a proto::AllTypes) -> Self {
+    pub fn from(
+        services: Vec<proto::Service<'a>>,
+        types: &'a proto::AllTypes,
+        options: &'a Options,
+    ) -> Self {
         let services = services
             .into_iter()
             .map(|s| Service::from(s, types))
             .collect();
 
-        Self { services }
+        Self { services, options }
     }
 }
 

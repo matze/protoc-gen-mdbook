@@ -6,6 +6,15 @@
 
 - Render nested message types.
 
+### Added
+
+- Optimization for Doxygen Markdown.
+
+### Changed
+
+- **Breaking**: `mdbook_opt` now takes a comma-separated list of key-value
+  pairs.
+
 
 ## 1.2.1
 

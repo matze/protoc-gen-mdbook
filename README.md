@@ -24,10 +24,18 @@ that includes support for protocol buffers if you want the rendered message
 types to be syntax highlighted.
 
 
-## Option
+## Options
 
-`protoc-gen-mdbook` interprets the `mdbook_opt` option passed to `protoc` as a
-switch to render a single Markdown page rather than one per proto file with the
-option being the filename.
+You can control the output behavior of `protoc-gen-mdbook` using `mdbook_opt`
+option passed to `protoc` driver. The option is a comma-separated list of
+key-value pairs separated by a colon. The following keys are understood:
 
-    $ protoc --mdbook_out=. --mdbook_opt=single.md path/to/*.proto
+* `output`: a filename for the entire output. If not set, multiple files will be
+  generated.
+* `optimize`: right now can be `doxygen` to optimize for inclusion in Doxygen
+  Markdown documentation, most importantly to fix header links. All other values
+  are ignored.
+
+A call to output to a single file optimized for Doxygen would look like this:
+
+    $ protoc --mdbook_out=. --mdbook_opt=output:single.md,optimize:doxygen path/to/*.proto

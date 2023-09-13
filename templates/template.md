@@ -54,7 +54,11 @@ enum {{ t.name }} {
 {% endif %}
 
 {% for method in service.methods %}
+{% if options.optimize_for_doxygen %}
+### {{ method.name }}()  {{ "{{#{}}}"|format(method.name|lower) }}
+{% else %}
 ### `{{ method.name }}()`
+{% endif %}
 
 <kbd>{{ method.call_type }}</kbd>{% if method.deprecated %} <kbd>deprecated</kbd>{% endif %}
 
@@ -74,7 +78,11 @@ enum {{ t.name }} {
 {% endfor %}
 
 {% for method in service.deprecated_methods %}
+{% if options.optimize_for_doxygen %}
+### {{ method.name }}()  {{ "{{#{}}}"|format(method.name|lower) }}
+{% else %}
 ### `{{ method.name }}()`
+{% endif %}
 
 <kbd>{{ method.call_type }}</kbd>{% if method.deprecated %} <kbd>deprecated</kbd>{% endif %}
 
