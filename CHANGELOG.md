@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+
+## 2.0.0
+
+**2023-09-13**
+
 ### Fixed
 
 - Render nested message types.
